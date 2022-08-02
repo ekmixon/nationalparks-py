@@ -15,22 +15,19 @@ DB_HOST = os.environ.get('DB_HOST', 'mongodb-nationalparks')
 DB_SERVICE_NAME = os.environ.get('DATABASE_SERVICE_NAME')
 
 if os.environ.get('uri'):
-	match = re.match("mongodb?:\/\/([^:^/]*):?(\d*)?", os.environ.get('uri'))
-    
-	if match:
-		DB_HOST = match.group(1)	
+	if match := re.match("mongodb?:\/\/([^:^/]*):?(\d*)?", os.environ.get('uri')):
+		DB_HOST = match[1]	
 
 if DB_SERVICE_NAME:
     DB_HOST = DB_SERVICE_NAME
-    
+
 DB_NAME = os.environ.get('DB_NAME', 'mongodb')
 
 DB_USERNAME = os.environ.get('DB_USERNAME', 'mongodb')
 DB_PASSWORD = os.environ.get('DB_PASSWORD', 'mongodb')
 
 if not DB_URI:
-    DB_URI = 'mongodb://%s:%s@%s:27017/%s' % (DB_USERNAME, DB_PASSWORD,
-            DB_HOST, DB_NAME)
+	DB_URI = f'mongodb://{DB_USERNAME}:{DB_PASSWORD}@{DB_HOST}:27017/{DB_NAME}'
 
 DATASET_FILE = 'nationalparks.json'
 
@@ -60,49 +57,50 @@ api.add_resource(Info, '/ws/info/')
 
 class DataLoad(Resource):
     def get(self):
-        client = MongoClient(DB_URI)
-        database = client[DB_NAME]
-        collection = database.nationalparks
+    	client = MongoClient(DB_URI)
+    	database = client[DB_NAME]
+    	collection = database.nationalparks
 
-        collection.remove({})
-        collection.create_index([('Location', GEO2D)])
+    	collection.remove({})
+    	collection.create_index([('Location', GEO2D)])
 
-        with open(DATASET_FILE, 'r') as fp:
-            entries = []
+    	with open(DATASET_FILE, 'r') as fp:
+    		entries = []
 
-            for data in fp.readlines():
-                entry = json.loads(data)
+    		for data in fp:
+    			entry = json.loads(data)
 
-                loc = [entry['coordinates'][1], entry['coordinates'][0]]
-                entry['Location'] = loc
+    			loc = [entry['coordinates'][1], entry['coordinates'][0]]
+    			entry['Location'] = loc
 
-                entries.append(entry)
+    			entries.append(entry)
 
-                if len(entries) >= 1000:
-                    collection.insert_many(entries)
-                    entries = []
+    			if len(entries) >= 1000:
+    			    collection.insert_many(entries)
+    			    entries = []
 
-            if entries:
-                collection.insert_many(entries)
+    		if entries:
+    		    collection.insert_many(entries)
 
-        return 'Items inserted in database: %s' % collection.count()
+    	return f'Items inserted in database: {collection.count()}'
 
 api.add_resource(DataLoad, '/ws/data/load')
 
 def format_result(entries):
-    result = []
+	result = []
 
-    for entry in entries:
-        data = {}
+	for entry in entries:
+		data = {
+			'id': entry['name'],
+			'latitude': str(entry['coordinates'][0]),
+			'longitude': str(entry['coordinates'][1]),
+			'name': entry['toponymName'],
+		}
 
-        data['id'] = entry['name']
-        data['latitude'] = str(entry['coordinates'][0])
-        data['longitude'] = str(entry['coordinates'][1])
-        data['name'] = entry['toponymName']
 
-        result.append(data)
+		result.append(data)
 
-    return result
+	return result
 
 class DataAll(Resource):
     def get(self):
